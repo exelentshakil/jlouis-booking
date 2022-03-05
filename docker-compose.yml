@@ -1,0 +1,86 @@
+version: "3.7"
+
+services:
+    nginx:
+        image: nginx:alpine
+        container_name: jlouis-nginx
+        restart: unless-stopped
+        ports:
+            - 8088:8080
+        volumes:
+            - ./:/var/www/html:cached
+            - ./.docker/nginx:/etc/nginx/conf.d
+#            - ./.docker/nginx/ssl:/etc/nginx/conf.d/ssl
+            -   type: bind
+                source: /run/host-services/ssh-auth.sock
+                target: /run/host-services/ssh-auth.sock
+        environment:
+            - SSH_AUTH_SOCK=/run/host-services/ssh-auth.soc
+        networks:
+            - jlouis-network
+        depends_on:
+            - app
+            - frontend
+
+    frontend:
+        image: node:10-alpine
+        container_name: jlouis-frontend
+        restart: unless-stopped
+        volumes:
+            - ./frontend/:/home/node/app:cached
+            - ./frontend/logs/:/home/.npm/_logs/2022-03-05T16_42_58_832Z-debug.log
+        networks:
+            - jlouis-network
+        command: npm run dev
+        depends_on:
+            - app
+
+    app:
+        build:
+            context: ./.docker/app
+            dockerfile: Dockerfile
+        container_name: jlouis-app
+        restart: unless-stopped
+        working_dir: /var/www/html
+        #command: php artisan serve --host=0.0.0.0 --port=8088
+        volumes:
+            - ./:/var/www/html:cached
+            - ./.docker/app/php-fpm.ini:/usr/local/etc/php/conf.d/99-app.ini
+        networks:
+            - jlouis-network
+        depends_on:
+            - mariadb
+            - redis
+    mariadb:
+        image: mariadb:10.5.8
+        container_name: jlouis-mariadb
+        restart: unless-stopped
+        ports:
+            - 33061:3306
+        volumes:
+            - jlouis_mysql_data:/var/lib/mysql
+        environment:
+            - MYSQL_ROOT_PASSWORD=root
+            - MYSQL_USER=admin
+            - MYSQL_PASSWORD=admin
+            - MYSQL_DATABASE=jlouis
+        networks:
+            - jlouis-network
+
+    redis:
+        image: redis:alpine
+        container_name: jlouis-redis
+        volumes:
+            - jlouis_redis_data:/data
+        networks:
+            - jlouis-network
+
+networks:
+    jlouis-network:
+        driver: bridge
+
+volumes:
+    jlouis_mysql_data:
+        driver: local
+    jlouis_redis_data:
+        driver: local
